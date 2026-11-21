@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>StarlinkLeo</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/chart.umd.min.js"></script>
+</head>
+<body>
+<header>
+  <div class="brand">🛰️ StarlinkLeo <span id="mock-badge" class="badge hidden">SIMULATION</span></div>
+  <div id="conn" class="conn">…</div>
+</header>
+<nav id="tabs">
+  <button data-tab="dashboard" class="active">Tableau de bord</button>
+  <button data-tab="history">Historique</button>
+  <button data-tab="sky">Obstructions</button>
+  <button data-tab="latency">Latence &amp; bufferbloat</button>
+  <button data-tab="optimize">Optimisation OpenWrt</button>
+  <button data-tab="control">Contrôle</button>
+</nav>
+<main>
+  <!-- Tableau de bord -->
+  <section id="tab-dashboard" class="tab active">
+    <div class="kpis">
+      <div class="kpi"><label>Download</label><b id="k-dl">–</b><small>Mb/s</small></div>
+      <div class="kpi"><label>Upload</label><b id="k-ul">–</b><small>Mb/s</small></div>
+      <div class="kpi"><label>Latence PoP</label><b id="k-lat">–</b><small>ms</small></div>
+      <div class="kpi"><label>Perte</label><b id="k-drop">–</b><small>%</small></div>
+      <div class="kpi"><label>Obstruction</label><b id="k-obs">–</b><small>%</small></div>
+      <div class="kpi"><label>Puissance</label><b id="k-pow">–</b><small>W</small></div>
+    </div>
+    <div class="grid2">
+      <div class="card"><h3>Débit (temps réel)</h3><canvas id="c-live-tput"></canvas></div>
+      <div class="card"><h3>Latence &amp; perte (temps réel)</h3><canvas id="c-live-lat"></canvas></div>
+    </div>
+    <div class="grid2">
+      <div class="card"><h3>Diagnostic</h3><ul id="findings" class="findings"></ul></div>
+      <div class="card"><h3>Parabole</h3><table id="dish-info" class="kv"></table></div>
+    </div>
+  </section>
+
+  <!-- Historique -->
+  <section id="tab-history" class="tab">
+    <div class="toolbar" id="ranges">
+      <button data-range="15m">15 min</button><button data-range="1h" class="active">1 h</button>
+      <button data-range="6h">6 h</button><button data-range="24h">24 h</button>
+      <button data-range="7d">7 j</button><button data-range="30d">30 j</button>
+    </div>
+    <div class="card"><h3>Débit</h3><canvas id="c-h-tput"></canvas></div>
+    <div class="grid2">
+      <div class="card"><h3>Latence</h3><canvas id="c-h-lat"></canvas></div>
+      <div class="card"><h3>Perte &amp; obstruction</h3><canvas id="c-h-drop"></canvas></div>
+    </div>
+    <div class="grid2">
+      <div class="card"><h3>Profil horaire (7 jours) — repère la congestion</h3><canvas id="c-hourly"></canvas></div>
+      <div class="card"><h3>Consommation</h3><canvas id="c-h-pow"></canvas></div>
+    </div>
+  </section>
+
+  <!-- Obstructions -->
+  <section id="tab-sky" class="tab">
+    <div class="grid2">
+      <div class="card center">
+        <h3>Carte d'obstruction</h3>
+        <canvas id="sky" width="492" height="492"></canvas>
+        <p class="legend"><span class="sw ok"></span>ciel dégagé <span class="sw bad"></span>obstruction <span class="sw none"></span>pas de donnée</p>
+        <button id="sky-refresh">Rafraîchir</button>
+      </div>
+      <div class="card">
+        <h3>Orientation</h3>
+        <table class="kv" id="orient"></table>
+        <h3>Obstructions par secteur</h3>
+        <canvas id="c-wedges"></canvas>
+        <p class="hint">Le centre de la carte est le zénith, le bord l'horizon (~25° d'élévation). Le nord est en haut.
+          Positionnez la parabole pour éloigner les zones rouges, puis réinitialisez la carte dans l'app Starlink.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Latence -->
+  <section id="tab-latency" class="tab">
+    <div class="card">
+      <h3>Test de latence sous charge</h3>
+      <p class="hint">Mesure la latence au repos, puis pendant un download et un upload saturés.
+        L'écart = bufferbloat. Le test consomme ~300-500 Mo de données.</p>
+      <button id="bb-run" class="primary">Lancer le test</button>
+      <span id="bb-phase"></span>
+      <div id="bb-result" class="bb-result"></div>
+    </div>
+    <div class="card"><h3>Historique des tests</h3><canvas id="c-bb"></canvas>
+      <table class="list" id="bb-table"></table></div>
+  </section>
+
+  <!-- Optimisation -->
+  <section id="tab-optimize" class="tab">
+    <div class="card">
+      <h3>Débits recommandés pour le shaper</h3>
+      <p class="hint">Calculés à partir de vos tests de débit et des pointes observées par la parabole.
+        cake-autorate fait varier le shaper CAKE entre <b>min</b> et <b>max</b> selon la latence mesurée :
+        idéal pour le débit variable de Starlink.</p>
+      <label>Interface WAN (périphérique) : <input id="wan-dev" value="eth1" size="8"></label>
+      <button id="opt-refresh">Régénérer</button>
+      <table class="list" id="rates"></table>
+      <p id="rates-src" class="hint"></p>
+    </div>
+    <div class="card">
+      <h3>1. Script d'installation tout-en-un</h3>
+      <p class="hint">À exécuter sur le routeur OpenWrt (bypass Starlink) :
+        <code>scp install_openwrt.sh root@192.168.1.1:/tmp/ &amp;&amp; ssh root@192.168.1.1 sh /tmp/install_openwrt.sh</code></p>
+      <a class="btn" id="dl-install" download>Télécharger install_openwrt.sh</a>
+      <pre id="f-install"></pre>
+    </div>
+    <div class="grid2">
+      <div class="card"><h3>/etc/config/sqm</h3><a class="btn" id="dl-sqm" download>Télécharger</a><pre id="f-sqm"></pre></div>
+      <div class="card"><h3>/root/cake-autorate/config.primary.sh</h3><a class="btn" id="dl-car" download>Télécharger</a><pre id="f-car"></pre></div>
+    </div>
+    <div class="card">
+      <h3>Alternative : SQM fixe (sans cake-autorate)</h3>
+      <p class="hint">Plus simple mais sacrifie du débit : le shaper est figé sous le débit bas observé.</p>
+      <pre id="f-sqm-static"></pre>
+    </div>
+    <div class="card">
+      <h3>Autres leviers</h3>
+      <ul class="tips">
+        <li><b>Mode bypass</b> : passez le routeur Starlink en bypass pour que le routeur OpenWrt gère seul la file d'attente.</li>
+        <li><b>Accès à la parabole en bypass</b> : ajoutez une IP 192.168.100.2/24 sur le WAN OpenWrt pour garder l'accès à 192.168.100.1.</li>
+        <li><b>Lien filaire 1 Gb/s</b> entre parabole et routeur (alerte « Ethernet lent » à surveiller).</li>
+        <li><b>Wi-Fi</b> : le bufferbloat peut aussi venir du Wi-Fi ; testez en filaire pour isoler.</li>
+        <li>Panneau LuCI complet : <a href="https://github.com/bigmalloy/openwrt-starlink-control" target="_blank" rel="noopener">openwrt-starlink-control</a>.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- Contrôle -->
+  <section id="tab-control" class="tab">
+    <div class="card">
+      <h3>Actions sur la parabole</h3>
+      <p class="hint">Chaque action demande confirmation. Le redémarrage coupe Internet ~2-5 minutes.</p>
+      <div class="actions">
+        <button data-action="reboot" class="danger">Redémarrer</button>
+        <button data-action="stow">Ranger (stow)</button>
+        <button data-action="unstow">Déployer (unstow)</button>
+      </div>
+      <p id="ctl-msg"></p>
+    </div>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>

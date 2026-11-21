@@ -1,0 +1,25 @@
+services:
+  starlinkleo:
+    build: .
+    container_name: starlinkleo
+    restart: unless-stopped
+    # Réseau hôte : accès direct à 192.168.100.1 et mesures de latence sur le vrai chemin réseau.
+    network_mode: host
+    volumes:
+      - ./data:/data
+    environment:
+      STARLINK_DISH_ADDRESS: "192.168.100.1:9200"
+      STARLINK_MOCK: "0"            # 1 = simulateur, sans parabole
+      STARLINK_POLL_INTERVAL: "2"
+      STARLINK_RETENTION_DAYS: "30"
+      STARLINK_ENABLE_CONTROLS: "1" # 0 = désactive reboot/stow
+      OPENWRT_WAN_DEV: "eth1"
+      PORT: "8080"
+      # --- Telegram (optionnel) : alertes + commandes ---
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-}"
+      TELEGRAM_ALLOWED_CHAT_IDS: "${TELEGRAM_ALLOWED_CHAT_IDS:-}"
+      ALERT_OUTAGE_SECONDS: "20"
+      # --- Tableau de bord distant Vercel (optionnel) ---
+      CLOUD_URL: "${CLOUD_URL:-}"
+      CLOUD_INGEST_TOKEN: "${CLOUD_INGEST_TOKEN:-}"
+      CLOUD_INTERVAL: "20"

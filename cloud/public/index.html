@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>StarlinkLeo</title>
+<script src="/chart.umd.min.js"></script>
+<style>
+:root { --bg:#f4f6fa; --card:#fff; --fg:#1b2330; --muted:#667085; --line:#e3e7ee; --accent:#2563eb; --ok:#16a34a; --warn:#d97706; --bad:#dc2626; --info:#0891b2; }
+@media (prefers-color-scheme: dark) { :root { --bg:#0e1218; --card:#161c25; --fg:#e6eaf0; --muted:#93a0b2; --line:#263040; --accent:#60a5fa; --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; --info:#22d3ee; } }
+* { box-sizing: border-box; }
+body { margin:0; font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--fg); }
+header { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:12px 16px; background:var(--card); border-bottom:1px solid var(--line); flex-wrap:wrap; }
+.brand { font-weight:700; font-size:18px; }
+.agent { font-size:13px; color:var(--muted); } .agent.ok::before { content:"● "; color:var(--ok); } .agent.bad::before { content:"● "; color:var(--bad); }
+main { padding:16px; max-width:1100px; margin:0 auto; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:16px; min-width:0; }
+.card h3 { margin:0 0 10px; font-size:14px; color:var(--muted); }
+.kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; margin-bottom:16px; }
+.kpi { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+.kpi label { display:block; color:var(--muted); font-size:12px; } .kpi b { font-size:26px; font-variant-numeric:tabular-nums; } .kpi small { color:var(--muted); margin-left:4px; }
+.grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px; margin-bottom:16px; } .grid2 > .card { margin:0; }
+ul.f { list-style:none; margin:0; padding:0; } ul.f li { border-left:4px solid var(--line); padding:6px 10px; margin-bottom:8px; background:var(--bg); border-radius:4px; }
+ul.f li.critical { border-color:var(--bad); } ul.f li.warning { border-color:var(--warn); } ul.f li.info { border-color:var(--info); } ul.f li.ok { border-color:var(--ok); }
+.t { font-weight:600; } .d { color:var(--muted); }
+table { width:100%; border-collapse:collapse; } td, th { padding:5px 6px; border-bottom:1px solid var(--line); text-align:left; } td:first-child { color:var(--muted); }
+button { font:inherit; padding:8px 14px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--fg); cursor:pointer; }
+button.primary { background:var(--accent); border-color:var(--accent); color:#fff; } button.danger { background:var(--bad); border-color:var(--bad); color:#fff; }
+.actions { display:flex; gap:10px; flex-wrap:wrap; }
+.hint { color:var(--muted); font-size:13px; }
+#login { max-width:360px; margin:12vh auto; } #login input { width:100%; padding:10px; font:inherit; margin:10px 0; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); }
+.hidden { display:none !important; }
+.err { color:var(--bad); }
+.chart { position:relative; height:240px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">🛰️ StarlinkLeo <span class="hint">· à distance</span></div>
+  <div><span id="agent" class="agent">…</span> <button id="logout" class="hidden">Déconnexion</button></div>
+</header>
+
+<main>
+  <form id="login" class="card hidden">
+    <h3>Accès au tableau de bord</h3>
+    <input id="pw" type="password" autocomplete="current-password" placeholder="Mot de passe" required>
+    <button class="primary" type="submit">Se connecter</button>
+    <p id="login-err" class="err"></p>
+  </form>
+
+  <div id="app" class="hidden">
+    <div class="kpis">
+      <div class="kpi"><label>État</label><b id="k-state" style="font-size:18px">–</b></div>
+      <div class="kpi"><label>Download</label><b id="k-dl">–</b><small>Mb/s</small></div>
+      <div class="kpi"><label>Upload</label><b id="k-ul">–</b><small>Mb/s</small></div>
+      <div class="kpi"><label>Latence</label><b id="k-lat">–</b><small>ms</small></div>
+      <div class="kpi"><label>Perte</label><b id="k-drop">–</b><small>%</small></div>
+      <div class="kpi"><label>Obstruction</label><b id="k-obs">–</b><small>%</small></div>
+    </div>
+    <div class="card"><h3>Débit (24 h)</h3><div class="chart"><canvas id="c-tput"></canvas></div></div>
+    <div class="card"><h3>Latence &amp; perte (24 h)</h3><div class="chart"><canvas id="c-lat"></canvas></div></div>
+    <div class="grid2">
+      <div class="card"><h3>Diagnostic</h3><ul id="findings" class="f"></ul></div>
+      <div class="card"><h3>Parabole</h3><table id="info"></table></div>
+    </div>
+    <div class="card">
+      <h3>Contrôle à distance</h3>
+      <p class="hint">Les commandes sont transmises à l'agent local au prochain échange (≤ 20 s).</p>
+      <div class="actions">
+        <button data-a="bufferbloat" class="primary">Test bufferbloat</button>
+        <button data-a="reboot" class="danger">Redémarrer</button>
+        <button data-a="stow">Ranger</button>
+        <button data-a="unstow">Déployer</button>
+      </div>
+      <table id="cmds" style="margin-top:12px"></table>
+    </div>
+    <div class="card"><h3>Derniers tests bufferbloat</h3><table id="bb"></table></div>
+  </div>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const fmt = (v, d = 1) => (v == null || Number.isNaN(v) ? "–" : Number(v).toFixed(d));
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const when = (t) => new Date(t * 1000).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+const LABEL = { reboot: "redémarrer la parabole", stow: "ranger la parabole (coupe Internet)", unstow: "déployer la parabole", bufferbloat: "lancer un test bufferbloat (consomme des données)" };
+let pw = sessionStorage.getItem("slpw") || "";
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, { ...opts, headers: { ...(opts.headers || {}), Authorization: "Bearer " + pw, "Content-Type": "application/json" } });
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 401) { logout(j.error); throw new Error(j.error); }
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+function logout(msg) { pw = ""; sessionStorage.removeItem("slpw"); show(false); $("#login-err").textContent = msg || ""; }
+function show(logged) { $("#login").classList.toggle("hidden", logged); $("#app").classList.toggle("hidden", !logged); $("#logout").classList.toggle("hidden", !logged); }
+
+$("#login").addEventListener("submit", async (e) => {
+  e.preventDefault(); pw = $("#pw").value; $("#login-err").textContent = "";
+  try { await refresh(); sessionStorage.setItem("slpw", pw); show(true); } catch (err) { $("#login-err").textContent = err.message; }
+});
+$("#logout").addEventListener("click", () => logout());
+
+Chart.defaults.color = css("--muted"); Chart.defaults.borderColor = css("--line");
+Chart.defaults.animation = false; Chart.defaults.elements.point.radius = 0; Chart.defaults.elements.line.borderWidth = 1.5;
+const mk = (id, sets, y1) => new Chart($(id), { type: "line", data: { labels: [], datasets: sets },
+  options: { maintainAspectRatio: false, interaction: { mode: "index", intersect: false }, plugins: { legend: { position: "bottom" } },
+    scales: { x: { ticks: { maxTicksLimit: 8 } }, y: { beginAtZero: true }, ...(y1 ? { y1: { position: "right", beginAtZero: true, grid: { drawOnChartArea: false } } } : {}) } } });
+const cT = mk("#c-tput", [{ label: "Download Mb/s", borderColor: "#2563eb", data: [] }, { label: "Upload Mb/s", borderColor: "#9333ea", data: [] }]);
+const cL = mk("#c-lat", [{ label: "Latence ms", borderColor: "#0891b2", data: [] }, { label: "Perte %", borderColor: "#dc2626", data: [], yAxisID: "y1" }], true);
+
+async function refresh() {
+  const r = await api("/api/state?points=1440");
+  const st = r.state || {}, s = st.status || {};
+  const age = r.agent_seen ? r.now - r.agent_seen : null;
+  const a = $("#agent");
+  a.className = "agent " + (age != null && age < 90 ? "ok" : "bad");
+  a.textContent = age == null ? "Agent jamais connecté" : age < 90 ? `Agent en ligne (il y a ${fmt(age, 0)} s)` : `Agent hors ligne depuis ${when(r.agent_seen)}`;
+
+  $("#k-state").textContent = st.status ? s.state : "Injoignable";
+  $("#k-dl").textContent = fmt((s.downlink_throughput_bps ?? NaN) / 1e6);
+  $("#k-ul").textContent = fmt((s.uplink_throughput_bps ?? NaN) / 1e6);
+  $("#k-lat").textContent = fmt(s.pop_ping_latency_ms, 0);
+  $("#k-drop").textContent = fmt((s.pop_ping_drop_rate ?? NaN) * 100);
+  $("#k-obs").textContent = fmt((s.fraction_obstructed ?? NaN) * 100, 2);
+
+  const h = r.hist || [];
+  const labels = h.map((p) => new Date(p.ts * 1000).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }));
+  cT.data.labels = labels; cT.data.datasets[0].data = h.map((p) => p.dl / 1e6); cT.data.datasets[1].data = h.map((p) => p.ul / 1e6); cT.update();
+  cL.data.labels = labels; cL.data.datasets[0].data = h.map((p) => p.lat); cL.data.datasets[1].data = h.map((p) => (p.drop ?? 0) * 100); cL.update();
+
+  $("#findings").innerHTML = (st.findings || []).map((f) => `<li class="${esc(f.severity)}"><div class="t">${esc(f.title)}</div>${f.action ? `<div class="d">→ ${esc(f.action)}</div>` : ""}</li>`).join("") || "<li>Aucune donnée</li>";
+  const up = s.uptime || 0;
+  $("#info").innerHTML = [["Matériel", s.hardware_version], ["Firmware", s.software_version], ["Uptime", st.status ? `${Math.floor(up / 86400)} j ${Math.floor((up % 86400) / 3600)} h` : "–"],
+    ["Orientation", st.status ? `az ${fmt(s.direction_azimuth)}° · él ${fmt(s.direction_elevation)}°` : "–"], ["Puissance", fmt(s.power_w, 0) + " W"],
+    ["Alertes", (s.active_alert_labels || []).join(", ") || "aucune"], ["Erreur agent", st.error || "–"]]
+    .map(([k, v]) => `<tr><td>${k}</td><td>${esc(v ?? "–")}</td></tr>`).join("");
+
+  const rows = [...(r.pending || []).map((c) => ({ ...c, status: "⏳ en attente" })), ...(r.results || []).map((c) => ({ ...c, status: c.ok ? "✅ exécutée" : "❌ " + (c.error || "échec") }))];
+  $("#cmds").innerHTML = rows.length ? "<tr><th>Heure</th><th>Action</th><th>Statut</th></tr>" + rows.slice(0, 10).map((c) => `<tr><td>${when(c.ts)}</td><td>${esc(c.action)}</td><td>${esc(c.status)}</td></tr>`).join("") : "";
+  const bb = st.bufferbloat || [];
+  $("#bb").innerHTML = bb.length ? "<tr><th>Date</th><th>Note</th><th>Down</th><th>Up</th><th>+ms down / up</th></tr>" + bb.map((t) => `<tr><td>${when(t.ts)}</td><td><b>${esc(t.grade)}</b></td><td>${fmt(t.download.mbps)} Mb/s</td><td>${fmt(t.upload.mbps)} Mb/s</td><td>+${fmt(t.download.increase_ms, 0)} / +${fmt(t.upload.increase_ms, 0)}</td></tr>`).join("") : "<tr><td>Aucun test</td></tr>";
+}
+
+document.querySelectorAll("[data-a]").forEach((b) => b.addEventListener("click", async () => {
+  if (!confirm(`Voulez-vous vraiment ${LABEL[b.dataset.a]} ?`)) return;
+  try { await api("/api/command", { method: "POST", body: JSON.stringify({ action: b.dataset.a }) }); await refresh(); } catch (e) { alert(e.message); }
+}));
+
+if (pw) refresh().then(() => show(true)).catch(() => show(false)); else show(false);
+setInterval(() => { if (pw) refresh().catch(() => {}); }, 15000);
+</script>
+</body>
+</html>

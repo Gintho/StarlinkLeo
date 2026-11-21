@@ -1,0 +1,10 @@
+{
+  "name": "starlinkleo-cloud",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Tableau de bord distant StarlinkLeo (Vercel) — relais entre l'agent local et le web",
+  "engines": { "node": ">=18" },
+  "scripts": { "test": "node --test test/*.test.js",
+    "dev": "node dev/dev-server.js" }
+}
